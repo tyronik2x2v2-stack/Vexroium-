@@ -1,4 +1,4 @@
-name: Build YSF for SA-MP 0.3.DL
+name: Get official YSF for SA-MP 0.3.DL
 
 on:
   workflow_dispatch:
@@ -12,38 +12,31 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  package:
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout official YSF source
-        uses: actions/checkout@v4
-        with:
-          repository: IS4Code/YSF
-          path: ysf
-
-      - name: Install 32-bit build dependencies
-        run: |
-          sudo dpkg --add-architecture i386
-          sudo apt-get update
-          sudo apt-get install -y build-essential g++-multilib gcc-multilib libc6-dev-i386
-
-      - name: Compile YSF for SA-MP 0.3.DL
-        working-directory: ysf
+      - name: Download official YSF 2.2 release package
         shell: bash
         run: |
           set -euo pipefail
-          sed -i 's/YSF = -D YSF $(COMPILE_FLAGS)/YSF = -D YSF -D SAMP_03DL $(COMPILE_FLAGS)/' makefile
-          sed -i 's|YSF_OUTFILE = "./YSF.so"|YSF_OUTFILE = "./YSF_DL.so"|' makefile
-          grep -nE '^(YSF =|YSF_OUTFILE =)' makefile
-          make YSF
-          test -s YSF_DL.so
+          curl --fail --location --retry 3 \
+            https://github.com/IS4Code/YSF/releases/download/v2.2/YSF.zip \
+            --output YSF.zip
+          unzip -l YSF.zip | grep -E 'plugins/YSF_DL\.so$'
+          mkdir extracted
+          unzip -q YSF.zip -d extracted
+          YSF_FILE="$(find extracted -type f -path '*/plugins/YSF_DL.so' -print -quit)"
+          test -n "$YSF_FILE"
+          test -s "$YSF_FILE"
+          cp "$YSF_FILE" YSF_DL.so
           file YSF_DL.so
-          readelf -h YSF_DL.so | grep 'Class:'
+          readelf -h YSF_DL.so | grep -E 'Class:|Machine:'
+          strings YSF_DL.so | grep -m 1 -E 'YSF|0\.3\.DL' || true
 
-      - name: Upload Linux plugin artifact
+      - name: Upload YSF_DL plugin
         uses: actions/upload-artifact@v4
         with:
-          name: YSF_DL-linux-32bit
-          path: ysf/YSF_DL.so
+          name: YSF_DL-linux-plugin
+          path: YSF_DL.so
           if-no-files-found: error
           retention-days: 14
