@@ -1,0 +1,1 @@
+Temporary trigger for read-only archive inventory workflow.
