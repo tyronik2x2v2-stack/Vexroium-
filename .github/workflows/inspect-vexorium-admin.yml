@@ -31,34 +31,50 @@ jobs:
           cfg = root / "scriptfiles" / "config.ini"
           mysql_cfg = root / "scriptfiles" / "mysql_settings.ini"
 
-          print("=== CONFIG FILE SIZES ===")
-          for p in (cfg, mysql_cfg):
-              print(f"{p}: exists={p.exists()} size={p.stat().st_size if p.exists() else '-'}")
+          def read_text(path):
+              raw = path.read_bytes()
+              for encoding in ("cp1251", "utf-8", "latin1"):
+                  try:
+                      return raw.decode(encoding)
+                  except UnicodeDecodeError:
+                      pass
+              return raw.decode("latin1")
 
-          lines = pawn.read_text(errors="replace").splitlines()
+          print("=== CONFIG.INI CONTENT ===")
+          if cfg.exists():
+              print(read_text(cfg)[:5000])
+          else:
+              print("MISSING")
+
+          print("=== MYSQL SETTINGS (PASSWORD MASKED) ===")
+          if mysql_cfg.exists():
+              for line in read_text(mysql_cfg).splitlines():
+                  if re.search(r"pass|token|secret|key", line, re.I):
+                      print(re.sub(r"=.*", "=<masked>", line))
+                  else:
+                      print(line[:300])
+
+          lines = read_text(pawn).splitlines()
           for start, end, label in [
-              (11940, 11990, "ACCOUNT LOAD"),
-              (39235, 39265, "SET ADMIN LEVEL"),
-              (58385, 58430, "CONNECT / SPECIAL ADMIN"),
-              (69590, 69695, "ADMIN ASSIGNMENT BRANCH"),
+              (15040, 15090, "MYSQL SETTINGS ENUM/LOADER"),
+              (21740, 21790, "CONFIG LOADER A"),
+              (21830, 21890, "CONFIG LOADER B"),
+              (11960, 11980, "ACCOUNT ADMIN LOAD"),
           ]:
               print(f"=== {label} ===")
               for n in range(start, min(end, len(lines))):
                   print(f"{n+1}: {lines[n][:350]}")
 
-          print("=== ADMIN-RELATED SQL TABLES/COLUMNS ===")
-          sql_text = sql.read_text(errors="replace") if sql.exists() else ""
-          sql_lines = sql_text.splitlines()
-          for i, line in enumerate(sql_lines):
-              if re.search(r"CREATE TABLE", line, re.I) and re.search(r"Qelksekm|account|user|player", line, re.I):
-                  print(f"schema {i+1}: {line[:500]}")
-                  for j in range(i+1, min(i+14, len(sql_lines))):
-                      if re.search(r"Admin|NickName|CREATE TABLE|ENGINE=", sql_lines[j], re.I):
-                          print(f"{j+1}: {sql_lines[j][:500]}")
-              if re.search(r"Stanislav_Belkin", line, re.I):
-                  print(f"account match {i+1}: {line[:1200]}")
-          print("=== ADMINNAME / CONFIG REFERENCES IN SCRIPT ===")
+          print("=== ALL ADMIN SETTINGS REFERENCES ===")
           for i, line in enumerate(lines):
-              if re.search(r"adminname|admin_name|AdminName|config\.ini|mysql_settings", line, re.I):
+              if re.search(r"MySQLSettings\[.*(ADMIN|Admin|admin)|MySQL_Admin|MYSQL_ADMIN|AdminName|adminname", line, re.I):
                   print(f"{i+1}: {line[:350]}")
+
+          print("=== SQL ACCOUNT TABLE ADMIN COLUMN ===")
+          if sql.exists():
+              sql_lines = read_text(sql).splitlines()
+              for i, line in enumerate(sql_lines):
+                  if "CREATE TABLE `Qelksekm`" in line:
+                      for j in range(i, min(i+30, len(sql_lines))):
+                          print(f"{j+1}: {sql_lines[j][:400]}")
           PY
