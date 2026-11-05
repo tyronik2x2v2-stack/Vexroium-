@@ -1,0 +1,49 @@
+name: Build YSF for SA-MP 0.3.DL
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - build-ysf-dl
+    paths:
+      - .github/workflows/build-ysf-dl.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout official YSF source
+        uses: actions/checkout@v4
+        with:
+          repository: IS4Code/YSF
+          path: ysf
+
+      - name: Install 32-bit build dependencies
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y build-essential g++-multilib gcc-multilib libc6-dev-i386
+
+      - name: Compile YSF for SA-MP 0.3.DL
+        working-directory: ysf
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i 's/YSF = -D YSF $(COMPILE_FLAGS)/YSF = -D YSF -D SAMP_03DL $(COMPILE_FLAGS)/' makefile
+          sed -i 's|YSF_OUTFILE = "./YSF.so"|YSF_OUTFILE = "./YSF_DL.so"|' makefile
+          grep -nE '^(YSF =|YSF_OUTFILE =)' makefile
+          make YSF
+          test -s YSF_DL.so
+          file YSF_DL.so
+          readelf -h YSF_DL.so | grep 'Class:'
+
+      - name: Upload Linux plugin artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: YSF_DL-linux-32bit
+          path: ysf/YSF_DL.so
+          if-no-files-found: error
+          retention-days: 14
