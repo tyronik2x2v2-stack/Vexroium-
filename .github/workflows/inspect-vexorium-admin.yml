@@ -1,0 +1,67 @@
+name: Inspect Vexorium admin setup
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - build-ysf-dl
+    paths:
+      - .github/workflows/inspect-vexorium-admin.yml
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect admin configuration safely
+        shell: bash
+        run: |
+          set -euo pipefail
+          unzip -q vexorium_server.zip -d source
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path("source")
+          pawn = root / "gamemodes" / "vexoriumrp.pwn"
+          sql = root / "dump.sql"
+          cfg = root / "scriptfiles" / "config.ini"
+
+          print("=== CONFIG.INI (secrets masked) ===")
+          if cfg.exists():
+              for line in cfg.read_text(errors="replace").splitlines():
+                  if re.search(r"pass|token|secret|key", line, re.I):
+                      print(re.sub(r"=.*", "=<masked>", line))
+                  else:
+                      print(line[:300])
+          else:
+              print("MISSING")
+
+          print("=== PAWN ADMIN REFERENCES ===")
+          lines = pawn.read_text(errors="replace").splitlines()
+          terms = re.compile(r"adminname|Stanislav_Belkin|setadmin|adminlevel|padmin|admin_level|PlayerInfo.*admin|admin.*PlayerInfo", re.I)
+          matches = [i for i, line in enumerate(lines) if terms.search(line)]
+          seen = set()
+          for i in matches[:80]:
+              for j in range(max(0, i-3), min(len(lines), i+5)):
+                  if j not in seen:
+                      print(f"{j+1}: {lines[j][:300]}")
+                      seen.add(j)
+              print("---")
+
+          print("=== SQL ADMIN FIELD/ACCOUNT MATCHES ===")
+          if sql.exists():
+              sql_lines = sql.read_text(errors="replace").splitlines()
+              for i, line in enumerate(sql_lines):
+                  if re.search(r"Stanislav_Belkin", line, re.I):
+                      print(f"target account line {i+1}: {line[:1000]}")
+                  elif re.search(r"CREATE TABLE.*(accounts|users|players)", line, re.I):
+                      print(f"table schema line {i+1}: {line[:500]}")
+                      for j in range(i+1, min(i+12, len(sql_lines))):
+                          print(f"{j+1}: {sql_lines[j][:500]}")
+          else:
+              print("dump.sql missing")
+          PY
