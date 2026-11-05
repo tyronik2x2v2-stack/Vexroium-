@@ -1,0 +1,32 @@
+name: Inspect Vexorium server archive
+
+on:
+  push:
+    paths:
+      - 'vexorium_server.zip'
+      - '.github/workflows/inspect-server-archive.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: List archive contents without executing files
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== ZIP CHECK ==="
+          unzip -tq vexorium_server.zip
+          echo "=== ARCHIVE FILE TREE (first 300 entries) ==="
+          unzip -Z1 vexorium_server.zip | sed -n '1,300p'
+          echo "=== FILE TYPE COUNTS ==="
+          unzip -Z1 vexorium_server.zip | awk -F. '
+            NF > 1 { ext=tolower($NF); count[ext]++ }
+            END { for (ext in count) print ext, count[ext] }
+          ' | sort
